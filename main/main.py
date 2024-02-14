@@ -2,6 +2,9 @@ from neutral_atom_imaging_simulation.Camera import EMCCDCamera
 from neutral_atom_imaging_simulation.Experiment import TweezerArray
 from neutral_atom_imaging_simulation.ImageGenerator import ImageGenerator
 import matplotlib.pyplot as plt
+import math
+import scipy.constants as constants
+import numpy as np
 
 def get_ixon_ultra_888_camera() -> EMCCDCamera:
     cam = EMCCDCamera(resolution=(1024, 1024),
@@ -43,6 +46,47 @@ def check_image_generation():
     fig.colorbar(cax)
     plt.show()
 
+    
+def intensity_of_atom(atom_location, xx, yy):
+    x = atom_location[0]
+    y = atom_location[1]
+    z = np.linspace(0, atom_location[2], 250)
+    # Numerical aperature (NA) is 0.75
+    # wavelength is 780nm
+    # 6 mil photons / second coming out of the atom and probably like 15% of that gets to the objective
+    wavelength = 780 * (10 ** -9)
+    numerical_aperture = 0.75
+    refractive_index = 1
+    radial_distance = np.sqrt(np.power(xx - x, 2) + np.power(yy - y, 2))
+    # derivied by relating the numerical aperature --> raleigh range and gaussian beam waist --> raleigh range, setting the equations equal to each other
+    # and solving for the waist radius given numerical aperature
+
+    waist_radius = wavelength / (np.pi * numerical_aperture)
+    rayleigh_range = (np.pi * (np.power(waist_radius, 2)) * refractive_index) / wavelength
+
+    radius_at_z = waist_radius * (np.sqrt(1 + np.power((z / rayleigh_range), 2)))
+
+    frequency = constants.speed_of_light / wavelength
+    #realistically only get 15%
+    power_from_atom = (6000000 * constants.Planck * frequency) * 0.15
+    initial_intensity = (2 * power_from_atom) / (math.pi * (waist_radius ** 2)) 
+    zz = initial_intensity * np.power((np.power((waist_radius / radius_at_z), 2)), 2) * np.power(np.e, (-2 * (np.power(radial_distance, 2)) / (np.power(radius_at_z, 2))))
+    return zz
+    
 
 if __name__ == "__main__":
-    check_image_generation()
+    atoms = [
+        (4, 1 , 1),
+        (5, 5, 1),
+        (6, 4, 1)
+    ]
+    x_axis = np.linspace(0, 10, 250)
+    y_axis = np.linspace(0, 10, 250)
+
+    xx, yy = np.meshgrid(x_axis, y_axis)
+    totalintensity = 0
+    for atom in atoms:
+        zz = intensity_of_atom(atom, xx, yy)
+        totalintensity += zz
+    plt.imshow(totalintensity)
+    plt.show()
